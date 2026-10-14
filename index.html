@@ -1,0 +1,202 @@
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pemindai QR - Pilkades Cinanjung</title>
+
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 560px;
+      margin: 25px auto;
+      padding: 16px;
+      color: #1f2937;
+      background: #f3f6f9;
+    }
+
+    .card {
+      background: white;
+      border-radius: 14px;
+      padding: 20px;
+      box-shadow: 0 3px 14px #00000012;
+    }
+
+    h2 { margin-top: 0; }
+
+    #reader {
+      width: 100%;
+      margin: 18px auto;
+    }
+
+    button {
+      padding: 12px 16px;
+      border: 0;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+      margin: 4px 2px;
+    }
+
+    #mulai { background: #166534; color: white; }
+    #berhenti { background: #e5e7eb; color: #111827; }
+
+    #status {
+      padding: 12px;
+      border-radius: 8px;
+      background: #f3f4f6;
+      overflow-wrap: anywhere;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="card">
+    <h2>Pemindai QR Undangan</h2>
+    <p>E-Voting Simulasi Pilkades Cinanjung</p>
+
+    <div id="reader"></div>
+
+    <button id="mulai" onclick="mulaiScan()">Mulai Scan</button>
+    <button id="berhenti" onclick="berhentiScan()">Hentikan</button>
+
+    <p id="status">Klik Mulai Scan dan izinkan penggunaan kamera.</p>
+  </div>
+
+  <script>
+    let scanner = null;
+    let aktif = false;
+    let sedangProses = false;
+
+    const statusEl = document.getElementById('status');
+
+    async function mulaiScan() {
+      if (aktif || scanner) {
+        statusEl.textContent = 'Pemindai sedang aktif.';
+        return;
+      }
+
+      try {
+        if (!window.isSecureContext) {
+          throw new Error('Halaman harus menggunakan HTTPS.');
+        }
+
+        if (!navigator.mediaDevices ||
+            !navigator.mediaDevices.getUserMedia) {
+          throw new Error('Browser tidak mendukung akses kamera.');
+        }
+
+        statusEl.textContent = 'Meminta akses kamera...';
+
+        scanner = new Html5Qrcode('reader');
+
+        await scanner.start(
+          { facingMode: 'environment' },
+          {
+            fps: 10,
+            qrbox: { width: 250, height: 250 }
+          },
+          hasilQR,
+          function() {}
+        );
+
+        aktif = true;
+        statusEl.textContent =
+          'Kamera aktif. Arahkan QR undangan ke kamera.';
+      } catch (e) {
+        console.error(e);
+        statusEl.textContent =
+          'Gagal membuka kamera: ' + e.message;
+
+        if (scanner) {
+          try { await scanner.stop(); } catch (_) {}
+          try { scanner.clear(); } catch (_) {}
+        }
+
+        scanner = null;
+        aktif = false;
+      }
+    }
+
+    async function hasilQR(teks) {
+      if (sedangProses) return;
+      sedangProses = true;
+
+      try {
+        let url;
+
+        try {
+          url = new URL(teks);
+        } catch (_) {
+          statusEl.textContent = 'QR bukan tautan yang valid.';
+          return;
+        }
+
+        const token = (
+          url.searchParams.get('token') || ''
+        ).trim().toUpperCase();
+
+        if (
+          url.protocol !== 'https:' ||
+          url.hostname !== 'script.google.com' ||
+          !url.pathname.endsWith('/exec') ||
+          !token
+        ) {
+          statusEl.textContent =
+            'QR tidak sesuai format undangan simulasi.';
+          return;
+        }
+
+        await berhentiScan();
+
+        statusEl.textContent =
+          'QR berhasil dibaca. Mengirim token ke aplikasi...';
+
+        if (!window.opener || window.opener.closed) {
+          statusEl.textContent =
+            'Aplikasi utama tidak ditemukan. Buka pemindai melalui tombol di aplikasi.';
+          return;
+        }
+
+        window.opener.postMessage(
+          {
+            type: 'CINANJUNG_QR_TOKEN',
+            token: token
+          },
+          '*'
+        );
+
+        statusEl.textContent =
+          'Token telah dikirim. Kembali ke tab aplikasi utama.';
+      } catch (e) {
+        statusEl.textContent =
+          'Gagal memproses QR: ' + e.message;
+      } finally {
+        sedangProses = false;
+      }
+    }
+
+    async function berhentiScan() {
+      if (scanner) {
+        try {
+          if (aktif) await scanner.stop();
+        } catch (_) {}
+
+        try { scanner.clear(); } catch (_) {}
+      }
+
+      scanner = null;
+      aktif = false;
+    }
+
+    window.addEventListener('beforeunload', function() {
+      if (scanner && aktif) {
+        scanner.stop().catch(function() {});
+      }
+    });
+  </script>
+</body>
+</html>
