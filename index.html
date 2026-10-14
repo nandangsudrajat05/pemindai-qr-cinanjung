@@ -179,15 +179,18 @@
             : String(error))
         );
 
-        if (scanner && !aktif) {
-          try {
-            scanner.clear();
-          } catch (_) {
-            // Abaikan jika elemen belum siap dibersihkan.
-          }
+if (scanner && !aktif) {
+  const pemindaiLama = scanner;
 
-          scanner = null;
-        }
+  try {
+    await pemindaiLama.stop();
+  } catch (e) {
+    console.warn('Stop setelah gagal:', e);
+  }
+
+  // Jangan panggil clear() di sini.
+  scanner = null;
+}
 
       } finally {
         prosesMulaiScan = false;
