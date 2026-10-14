@@ -108,9 +108,12 @@
           qrbox: { width: 250, height: 250 }
         },
         async function (teksQR) {
-          if (sedangProses || !aktif) return;
-          await hasilQR(teksQR);
-        },
+  console.log('QR TERDETEKSI:', teksQR);
+  statusEl.textContent = 'QR terdeteksi: ' + teksQR;
+
+  if (sedangProses || !aktif) return;
+  await hasilQR(teksQR);
+}
         function () {
           // QR belum terbaca, lanjutkan pemindaian.
         }
