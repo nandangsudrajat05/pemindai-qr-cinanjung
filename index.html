@@ -162,12 +162,12 @@
         }
 
         window.opener.postMessage(
-          {
-            type: 'CINANJUNG_QR_TOKEN',
-            token: token
-          },
-          '*'
-        );
+  {
+    type: 'CINANJUNG_QR_TOKEN',
+    token: token
+  },
+  'https://script.google.com'
+);
 
         statusEl.textContent =
           'Token telah dikirim. Kembali ke tab aplikasi utama.';
