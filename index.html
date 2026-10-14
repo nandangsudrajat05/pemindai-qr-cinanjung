@@ -73,53 +73,64 @@
 
     const statusEl = document.getElementById('status');
 
-    async function mulaiScan() {
-      if (aktif || scanner) {
-        statusEl.textContent = 'Pemindai sedang aktif.';
-        return;
-      }
+    
+async function mulaiScan() {
+  try {
+    const elemen = document.getElementById("reader");
 
-      try {
-        if (!window.isSecureContext) {
-          throw new Error('Halaman harus menggunakan HTTPS.');
-        }
-
-        if (!navigator.mediaDevices ||
-            !navigator.mediaDevices.getUserMedia) {
-          throw new Error('Browser tidak mendukung akses kamera.');
-        }
-
-        statusEl.textContent = 'Meminta akses kamera...';
-
-        scanner = new Html5Qrcode('reader');
-
-        await scanner.start(
-          { facingMode: 'environment' },
-          {
-            fps: 10,
-            qrbox: { width: 250, height: 250 }
-          },
-          hasilQR,
-          function() {}
-        );
-
-        aktif = true;
-        statusEl.textContent =
-          'Kamera aktif. Arahkan QR undangan ke kamera.';
-      } catch (e) {
-        console.error(e);
-        statusEl.textContent =
-          'Gagal membuka kamera: ' + e.message;
-
-        if (scanner) {
-          try { await scanner.stop(); } catch (_) {}
-          try { scanner.clear(); } catch (_) {}
-        }
-
-        scanner = null;
-        aktif = false;
-      }
+    if (!elemen) {
+      alert("Elemen kamera dengan ID reader tidak ditemukan.");
+      return;
     }
+
+    if (typeof Html5Qrcode === "undefined") {
+      alert("Library pemindai QR gagal dimuat. Periksa koneksi internet.");
+      return;
+    }
+
+    if (!navigator.mediaDevices ||
+        !navigator.mediaDevices.getUserMedia) {
+      alert(
+        "Browser tidak menyediakan akses kamera. " +
+        "Buka halaman melalui HTTPS menggunakan Chrome."
+      );
+      return;
+    }
+
+    if (!window.pemindaiQR) {
+      window.pemindaiQR = new Html5Qrcode("reader");
+    }
+
+    await window.pemindaiQR.start(
+      { facingMode: "environment" },
+      {
+        fps: 10,
+        qrbox: { width: 250, height: 250 }
+      },
+      function (teksQR) {
+        if (typeof hasilQR === "function") {
+          hasilQR(teksQR);
+        }
+      },
+      function () {
+        // Abaikan kesalahan saat QR belum terbaca.
+      }
+    );
+
+    console.log("Kamera berhasil dibuka.");
+
+  } catch (error) {
+    console.error("Kesalahan kamera:", error);
+
+    const pesan =
+      error && error.message
+        ? error.message
+        : String(error);
+
+    alert("Gagal membuka kamera: " + pesan);
+  }
+}
+
 
     async function hasilQR(teks) {
       if (sedangProses) return;
