@@ -9,6 +9,10 @@
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
   <style>
+    * {
+      box-sizing: border-box;
+    }
+
     body {
       font-family: Arial, sans-serif;
       max-width: 560px;
@@ -25,7 +29,9 @@
       box-shadow: 0 3px 14px #00000012;
     }
 
-    h2 { margin-top: 0; }
+    h2 {
+      margin-top: 0;
+    }
 
     #reader {
       width: 100%;
@@ -41,14 +47,27 @@
       margin: 4px 2px;
     }
 
-    #mulai { background: #166534; color: white; }
-    #berhenti { background: #e5e7eb; color: #111827; }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    #mulai {
+      background: #166534;
+      color: white;
+    }
+
+    #berhenti {
+      background: #e5e7eb;
+      color: #111827;
+    }
 
     #status {
       padding: 12px;
       border-radius: 8px;
       background: #f3f4f6;
       overflow-wrap: anywhere;
+      line-height: 1.5;
     }
   </style>
 </head>
@@ -60,171 +79,249 @@
 
     <div id="reader"></div>
 
-    <button id="mulai" onclick="mulaiScan()">Mulai Scan</button>
-    <button id="berhenti" onclick="berhentiScan()">Hentikan</button>
+    <button id="mulai" type="button" onclick="mulaiScan()">
+      Mulai Scan
+    </button>
 
-    <p id="status">Klik Mulai Scan dan izinkan penggunaan kamera.</p>
+    <button id="berhenti" type="button" onclick="berhentiScan()">
+      Hentikan
+    </button>
+
+    <p id="status">
+      Klik Mulai Scan dan izinkan penggunaan kamera.
+    </p>
   </div>
 
-  
-<script>
-  let scanner = null;
-  let aktif = false;
-  let sedangProses = false;
-  let prosesMulaiScan = false;
+  <script>
+    let scanner = null;
+    let aktif = false;
+    let sedangProses = false;
+    let prosesMulaiScan = false;
+    let prosesBerhentiScan = null;
 
-  const statusEl = document.getElementById('status');
-  const tombolMulai = document.getElementById('mulai');
-  const tombolBerhenti = document.getElementById('berhenti');
+    const statusEl = document.getElementById('status');
+    const tombolMulai = document.getElementById('mulai');
+    const tombolBerhenti = document.getElementById('berhenti');
 
-  async function mulaiScan() {
-    if (aktif || prosesMulaiScan || sedangProses) return;
-
-    prosesMulaiScan = true;
-    tombolMulai.disabled = true;
-
-    try {
-      if (typeof Html5Qrcode === 'undefined') {
-        throw new Error('Library pemindai QR gagal dimuat.');
-      }
-
-      if (!navigator.mediaDevices ||
-          !navigator.mediaDevices.getUserMedia) {
-        throw new Error(
-          'Akses kamera tidak tersedia. Gunakan Chrome melalui HTTPS.'
-        );
-      }
-
-      if (!scanner) {
-        scanner = new Html5Qrcode('reader');
-      }
-
-      statusEl.textContent = 'Memulai kamera...';
-
-      await scanner.start(
-        { facingMode: 'environment' },
-        {
-          fps: 10,
-          qrbox: { width: 250, height: 250 }
-        },
-        async function (teksQR) {
-  console.log('QR TERDETEKSI:', teksQR);
-  statusEl.textContent = 'QR terdeteksi: ' + teksQR;
-
-  if (sedangProses || !aktif) return;
-  await hasilQR(teksQR);
-}
-        function () {
-          // QR belum terbaca, lanjutkan pemindaian.
-        }
-      );
-
-      aktif = true;
-      statusEl.textContent = 'Kamera aktif. Arahkan ke QR undangan.';
-
-    } catch (error) {
-      console.error('Kesalahan kamera:', error);
-      statusEl.textContent =
-        'Gagal membuka kamera: ' +
-        (error && error.message ? error.message : String(error));
-
-    } finally {
-      prosesMulaiScan = false;
-      tombolMulai.disabled = aktif;
+    function ubahStatus(pesan) {
+      statusEl.textContent = pesan;
     }
-  }
 
-  async function hasilQR(teks) {
-    if (sedangProses || !aktif) return;
-    sedangProses = true;
+    async function mulaiScan() {
+      if (aktif || prosesMulaiScan || sedangProses) {
+        return;
+      }
 
-    try {
-      let url;
+      if (prosesBerhentiScan) {
+        await prosesBerhentiScan;
+      }
+
+      prosesMulaiScan = true;
+      tombolMulai.disabled = true;
+      tombolBerhenti.disabled = true;
 
       try {
-        url = new URL(teks);
-      } catch (_) {
-        statusEl.textContent = 'QR bukan tautan yang valid.';
-        return;
+        if (typeof Html5Qrcode === 'undefined') {
+          throw new Error(
+            'Library QR gagal dimuat. Periksa koneksi internet.'
+          );
+        }
+
+        if (
+          !navigator.mediaDevices ||
+          !navigator.mediaDevices.getUserMedia
+        ) {
+          throw new Error(
+            'Akses kamera tidak tersedia. Gunakan Chrome melalui HTTPS.'
+          );
+        }
+
+        scanner = new Html5Qrcode('reader');
+
+        ubahStatus('Memulai kamera...');
+
+        const pemindaiSaatIni = scanner;
+
+        await pemindaiSaatIni.start(
+          { facingMode: 'environment' },
+          {
+            fps: 10,
+            qrbox: { width: 250, height: 250 },
+            aspectRatio: 1
+          },
+          function (teksQR) {
+            console.log('QR TERDETEKSI:', teksQR);
+
+            if (!aktif || sedangProses) {
+              return;
+            }
+
+            hasilQR(teksQR);
+          },
+          function () {
+            // Tidak ada QR terbaca pada frame ini.
+          }
+        );
+
+        aktif = true;
+
+        ubahStatus(
+          'Kamera aktif. Arahkan QR undangan ke dalam kotak pemindaian.'
+        );
+
+      } catch (error) {
+        console.error('Kesalahan kamera:', error);
+
+        ubahStatus(
+          'Gagal membuka kamera: ' +
+          (error && error.message
+            ? error.message
+            : String(error))
+        );
+
+        if (scanner && !aktif) {
+          try {
+            scanner.clear();
+          } catch (_) {
+            // Abaikan jika elemen belum siap dibersihkan.
+          }
+
+          scanner = null;
+        }
+
+      } finally {
+        prosesMulaiScan = false;
+        tombolMulai.disabled = aktif;
+        tombolBerhenti.disabled = !aktif;
       }
-
-      const token = (
-        url.searchParams.get('token') || ''
-      ).trim().toUpperCase();
-
-      if (
-        url.protocol !== 'https:' ||
-        url.hostname !== 'script.google.com' ||
-        !url.pathname.endsWith('/exec') ||
-        !/^DEMO-\d{3}$/.test(token)
-      ) {
-        statusEl.textContent =
-          'QR tidak sesuai format undangan simulasi.';
-        return;
-      }
-
-      await berhentiScan();
-
-      if (!window.opener || window.opener.closed) {
-        statusEl.textContent =
-          'Aplikasi utama tidak ditemukan. Buka pemindai melalui tombol di aplikasi.';
-        return;
-      }
-
-      window.opener.postMessage(
-        {
-          type: 'CINANJUNG_QR_TOKEN',
-          token: token
-        },
-        '*'
-      );
-
-      statusEl.textContent =
-        'Token telah dikirim. Kembali ke tab aplikasi utama.';
-
-    } catch (error) {
-      statusEl.textContent =
-        'Gagal memproses QR: ' +
-        (error && error.message ? error.message : String(error));
-
-    } finally {
-      sedangProses = false;
     }
-  }
 
-  async function berhentiScan() {
-    if (!scanner) {
-      aktif = false;
-      tombolMulai.disabled = false;
+    async function hasilQR(teks) {
+      if (sedangProses || !aktif) {
+        return;
+      }
+
+      sedangProses = true;
+      tombolMulai.disabled = true;
+
+      try {
+        let url;
+
+        try {
+          url = new URL(teks);
+        } catch (_) {
+          ubahStatus('QR terbaca, tetapi bukan tautan yang valid.');
+          return;
+        }
+
+        const token = (
+          url.searchParams.get('token') || ''
+        ).trim().toUpperCase();
+
+        if (
+          url.protocol !== 'https:' ||
+          url.hostname !== 'script.google.com' ||
+          !url.pathname.endsWith('/exec') ||
+          !/^DEMO-\d{3}$/.test(token)
+        ) {
+          ubahStatus(
+            'QR terdeteksi, tetapi format undangan tidak sesuai. ' +
+            'Pastikan QR berisi URL aplikasi dengan token simulasi.'
+          );
+          return;
+        }
+
+        ubahStatus('QR valid. Menghentikan kamera...');
+
+        await berhentiScan();
+
+        if (!window.opener || window.opener.closed) {
+          ubahStatus(
+            'Token belum dikirim. Aplikasi utama tidak ditemukan. ' +
+            'Buka pemindai melalui tombol di aplikasi utama.'
+          );
+          return;
+        }
+
+        window.opener.postMessage(
+          {
+            type: 'CINANJUNG_QR_TOKEN',
+            token: token
+          },
+          '*'
+        );
+
+        ubahStatus(
+          'Token ' + token +
+          ' telah dikirim. Kembali ke tab aplikasi utama.'
+        );
+
+      } catch (error) {
+        console.error('Kesalahan memproses QR:', error);
+
+        ubahStatus(
+          'Gagal memproses QR: ' +
+          (error && error.message
+            ? error.message
+            : String(error))
+        );
+
+      } finally {
+        sedangProses = false;
+      }
+    }
+
+    async function berhentiScan() {
+      if (prosesBerhentiScan) {
+        return prosesBerhentiScan;
+      }
+
+      prosesBerhentiScan = (async function () {
+        const pemindai = scanner;
+
+        aktif = false;
+        tombolMulai.disabled = true;
+        tombolBerhenti.disabled = true;
+
+        if (!pemindai) {
+          tombolMulai.disabled = false;
+          return;
+        }
+
+        try {
+          await pemindai.stop();
+        } catch (error) {
+          console.warn('Proses stop kamera:', error);
+        }
+
+        try {
+          pemindai.clear();
+        } catch (error) {
+          console.warn('Proses clear pemindai:', error);
+        }
+
+        if (scanner === pemindai) {
+          scanner = null;
+        }
+
+        tombolMulai.disabled = false;
+        tombolBerhenti.disabled = true;
+      })();
+
+      try {
+        await prosesBerhentiScan;
+      } finally {
+        prosesBerhentiScan = null;
+      }
+
       return;
     }
 
-    const pemindai = scanner;
-    scanner = null;
-    aktif = false;
-
-    try {
-      await pemindai.stop();
-    } catch (error) {
-      console.warn('Pemindai sudah berhenti:', error);
-    }
-
-    try {
-      pemindai.clear();
-    } catch (error) {
-      console.warn('Pembersihan pemindai:', error);
-    }
-
-    tombolMulai.disabled = false;
-    statusEl.textContent = 'Pemindaian dihentikan.';
-  }
-
-  window.addEventListener('beforeunload', function () {
-    if (scanner && aktif) {
-      scanner.stop().catch(function () {});
-    }
-  });
-</script>
-
+    window.addEventListener('beforeunload', function () {
+      if (scanner && aktif) {
+        scanner.stop().catch(function () {});
+      }
+    });
+  </script>
 </body>
 </html>
